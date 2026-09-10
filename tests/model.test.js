@@ -387,3 +387,119 @@ test('床板、护栏和衣柜各格的尺寸标线落在各自真实测量边�
       `Wardrobe zone ${index + 1} must be strictly above zone ${index + 2}, separated by a shelf`);
   }
 });
+
+test('六床从过道正面看均为左衣柜右书柜，柜内左分层右挂衣且抽屉在桌右', () => {
+  const dormitory = buildDormitory();
+  dormitory.model.updateMatrixWorld(true);
+  assert.equal(dormitory.units.size, 6);
+
+  for (const [number, unit] of dormitory.units) {
+    // Derive the viewer's horizontal axis from the assembled world transform,
+    // including the row rotation and both furniture/room reflections. Local
+    // +z points into the aisle, so the viewer looks in the opposite direction.
+    const origin = unit.group.localToWorld(new THREE.Vector3());
+    const towardAisle = unit.group.localToWorld(new THREE.Vector3(0, 0, 1))
+      .sub(origin).normalize();
+    const screenRight = towardAisle.negate().cross(new THREE.Vector3(0, 1, 0)).normalize();
+    const screenX = (object) => bounds(object).getCenter(new THREE.Vector3())
+      .sub(origin).dot(screenRight);
+
+    const desktopX = screenX(onlyMesh(unit.parts.desk, 'desktop'));
+    assert.ok(screenX(unit.parts.wardrobe) < desktopX,
+      `Bed ${number}: wardrobe must be left of the desktop when facing it from the aisle`);
+    assert.ok(screenX(unit.parts.bookcase) > desktopX,
+      `Bed ${number}: side bookcase must be right of the desktop when facing it from the aisle`);
+    assert.ok(screenX(unit.parts.drawer) > desktopX,
+      `Bed ${number}: drawer must be on the viewer's right beneath the desk`);
+
+    const hangingX = screenX(onlyMesh(unit.parts.wardrobe, 'hanging-rail'));
+    const shelves = meshesNamed(unit.parts.wardrobe, 'wardrobe-internal-shelf');
+    assert.equal(shelves.length, 3, `Bed ${number}: expected three internal shelves`);
+    for (const shelf of shelves) {
+      assert.ok(screenX(shelf) < hangingX,
+        `Bed ${number}: every wardrobe shelf must be left of the hanging compartment`);
+    }
+  }
+});
+
+test('六床键盘架向过道拉出且外滑轨固定，活动标线与各自椅子的坐姿眼点正确', () => {
+  const dormitory = buildDormitory();
+  dormitory.model.updateMatrixWorld(true);
+  const eyePositions = [];
+
+  for (const [number, unit] of dormitory.units) {
+    const slide = unit.keyboardSlide;
+    assert.ok(slide?.object?.isObject3D, `Bed ${number}: missing keyboard carriage`);
+    assert.ok(slide.closedPosition?.isVector3 && slide.openPosition?.isVector3,
+      `Bed ${number}: keyboard motion needs local endpoint positions`);
+    const tray = onlyMesh(unit.parts.keyboard, 'keyboard-tray');
+    const fixedRails = meshesNamed(unit.parts.keyboard, 'keyboard-slide');
+    assert.equal(fixedRails.length, 2, `Bed ${number}: two fixed outer slide channels`);
+    slide.object.position.copy(slide.closedPosition);
+    dormitory.model.updateMatrixWorld(true);
+    const trayClosed = tray.getWorldPosition(new THREE.Vector3());
+    const fixedPositions = fixedRails.map((rail) => rail.getWorldPosition(new THREE.Vector3()));
+    const origin = unit.group.localToWorld(new THREE.Vector3());
+    const towardAisle = unit.group.localToWorld(new THREE.Vector3(0, 0, 1))
+      .sub(origin).normalize();
+    const record = byId.get('keyboard.length');
+    const closedLine = dimensionFor(record, unit.parts.keyboard, unit);
+
+    slide.object.position.copy(slide.openPosition);
+    dormitory.model.updateMatrixWorld(true);
+    const displacement = tray.getWorldPosition(new THREE.Vector3()).sub(trayClosed);
+    assert.ok(displacement.dot(towardAisle) > 0,
+      `Bed ${number}: keyboard must extend towards its own aisle side`);
+    near(displacement.distanceTo(towardAisle.clone().multiplyScalar(displacement.length())), 0,
+      `Bed ${number}: keyboard motion stays along the aisle-facing depth axis`);
+    fixedRails.forEach((rail, index) =>
+      near(rail.getWorldPosition(new THREE.Vector3()).distanceTo(fixedPositions[index]), 0,
+        `Bed ${number}: fixed outer rail ${index + 1} remains attached to the desk`));
+    const openLine = dimensionFor(record, unit.parts.keyboard, unit);
+    assert.ok(openLine.a?.isVector3 && openLine.b?.isVector3);
+    near(openLine.a.distanceTo(openLine.b), 0.85,
+      `Bed ${number}: extended tray retains the 85 cm measurement line`);
+    for (const endpoint of ['a', 'b']) {
+      near(openLine[endpoint].clone().sub(closedLine[endpoint]).distanceTo(displacement), 0,
+        `Bed ${number}: measurement endpoint ${endpoint} follows the moving tray`);
+    }
+    slide.object.position.copy(slide.closedPosition);
+    dormitory.model.updateMatrixWorld(true);
+    near(tray.getWorldPosition(new THREE.Vector3()).distanceTo(trayClosed), 0,
+      `Bed ${number}: keyboard returns to its original closed position`);
+
+    const seat = onlyMesh(unit.parts.chair, 'chair-seat');
+    const anchors = [];
+    unit.parts.chair.traverse((object) => {
+      if (object.name === 'seated-eye') anchors.push(object);
+    });
+    assert.equal(anchors.length, 1, `Bed ${number}: exactly one seated eye anchor`);
+    const eye = anchors[0];
+    assert.equal(eye.parent, seat, `Bed ${number}: eye anchor belongs to this chair's seat`);
+    const eyeBefore = eye.getWorldPosition(new THREE.Vector3());
+    const seatBefore = seat.getWorldPosition(new THREE.Vector3());
+    assert.ok(eyeBefore.toArray().every(Number.isFinite), `Bed ${number}: finite world eye position`);
+    near(eyeBefore.x, seatBefore.x, `Bed ${number}: eye aligned with its seat on world X`);
+    near(eyeBefore.z, seatBefore.z, `Bed ${number}: eye aligned with its seat on world Z`);
+    assert.ok(eyeBefore.y > bounds(seat).max.y, `Bed ${number}: eye is above its own seat`);
+    eyePositions.push(eyeBefore.clone());
+
+    const chairPosition = unit.parts.chair.position.clone();
+    unit.parts.chair.position.add(new THREE.Vector3(0.13, 0.07, 0.09));
+    dormitory.model.updateMatrixWorld(true);
+    const seatMovement = seat.getWorldPosition(new THREE.Vector3()).sub(seatBefore);
+    const eyeMovement = eye.getWorldPosition(new THREE.Vector3()).sub(eyeBefore);
+    assert.ok(seatMovement.length() > 0, 'The follow check must actually move the chair');
+    near(eyeMovement.distanceTo(seatMovement), 0,
+      `Bed ${number}: eye follows the correct chair through all mirrored parent transforms`);
+    unit.parts.chair.position.copy(chairPosition);
+    dormitory.model.updateMatrixWorld(true);
+  }
+  assert.equal(eyePositions.length, 6);
+  for (let index = 0; index < eyePositions.length; index++) {
+    for (const other of eyePositions.slice(index + 1)) {
+      assert.ok(eyePositions[index].distanceTo(other) > 0.1,
+        'Different chairs must not resolve to a shared or stale world eye position');
+    }
+  }
+});

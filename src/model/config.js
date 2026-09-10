@@ -16,7 +16,10 @@ export function getLayout() {
   return ['left', 'right'].flatMap(side => (side === 'left' ? leftStarts : rightStarts).map((start, i) => ({
     number: numbers[side][i], side, start, end: start + slotLength,
     center: start + slotLength / 2, slotLength,
-    wardrobeEnd: [1, 4, 5].includes(numbers[side][i]) ? 'balcony' : 'entrance',
+    // Facing any desk from the aisle, the wardrobe is on the viewer's left.
+    // Local +x points toward the balcony on both rows after scene transforms:
+    // viewer-left is the entrance end on the left row and balcony end on the right.
+    wardrobeEnd: side === 'left' ? 'entrance' : 'balcony',
     omitStartRail: side === 'left' && i === 1 || side === 'right' && i === 2,
     omitEndRail: false,
   })));

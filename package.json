@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --test tests/model.test.js",
+    "test": "node --test tests/model.test.js tests/measurement-search.test.js tests/navigation.test.js tests/seated-view.test.js",
     "validate:export": "node tests/validate-export.mjs"
   },
   "dependencies": {

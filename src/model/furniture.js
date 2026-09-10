@@ -257,14 +257,29 @@ export function createFurniture({
     [deskX + 0.30, 0.751, 0.15], 0.019, black);
 
   const keyboard = part('keyboard');
-  box(keyboard, 'keyboard-tray', 0.85, 0.018, 0.38,
+  const keyboardCarriage = new THREE.Group();
+  keyboardCarriage.name = 'keyboard-moving-carriage';
+  keyboard.add(keyboardCarriage);
+  box(keyboardCarriage, 'keyboard-tray', 0.85, 0.018, 0.38,
     deskX, 0.61 + 0.009, 0.42);
-  box(keyboard, 'keyboard-front-edge', 0.85, 0.034, skin,
+  box(keyboardCarriage, 'keyboard-front-edge', 0.85, 0.034, skin,
     deskX, 0.627, 0.6175);
   for (const x of [deskX - 0.437, deskX + 0.437]) {
+    // The outer channels remain attached beneath the desk.
     box(keyboard, 'keyboard-slide', 0.012, 0.022, 0.37,
       x, 0.63, 0.4175, metal);
   }
+  for (const x of [deskX - 0.428, deskX + 0.428]) {
+    box(keyboardCarriage, 'keyboard-inner-slide', 0.006, 0.014, 0.34,
+      x, 0.63, 0.42, metal);
+  }
+  // Travel is an appearance/interaction allowance, not a measured dimension.
+  // A local +z translation always opens towards the aisle on either row.
+  const keyboardSlide = {
+    object: keyboardCarriage,
+    closedPosition: new THREE.Vector3(0, 0, 0),
+    openPosition: new THREE.Vector3(0, 0, 0.24),
+  };
 
   // Drawer and computer cabinet intentionally have different external widths.
   // Their measured interiors are 23 × 38 × 12 and 30 × 56 × 51 cm.
@@ -340,7 +355,13 @@ export function createFurniture({
   const chair = part('chair');
   const chairX = deskX;
   const chairZ = 1.02;
-  box(chair, 'chair-seat', 0.38, 0.019, 0.38, chairX, 0.46, chairZ);
+  const chairSeat = box(chair, 'chair-seat', 0.38, 0.019, 0.38, chairX, 0.46, chairZ);
+  // An invisible camera anchor follows the actual seat through every parent
+  // transform. Its eye offset is an estimated viewing pose, never query data.
+  const seatedEye = new THREE.Object3D();
+  seatedEye.name = 'seated-eye';
+  seatedEye.position.set(0, chairSeat.geometry.parameters.height / 2 + 0.74, 0);
+  chairSeat.add(seatedEye);
   box(chair, 'chair-back', 0.36, 0.265, 0.018, chairX, 0.735, chairZ + 0.178);
   for (const side of [-1, 1]) {
     const x = chairX + side * 0.155;
@@ -372,5 +393,5 @@ export function createFurniture({
     }
   }
 
-  return { group, doors, parts };
+  return { group, doors, parts, keyboardSlide };
 }

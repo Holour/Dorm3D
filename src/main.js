@@ -6,6 +6,9 @@ import { buildDormitory } from './model/scene.js';
 import { dimensionFor } from './model/dimensions.js';
 import { targetLabels, config } from './model/config.js';
 import { measurements, recordsFor, formatMeasurement } from './measurements.js';
+import { createKeyboardNavigation } from './navigation.js';
+import { searchMeasurements } from './measurement-search.js';
+import { createSeatedView } from './seated-view.js';
 
 const $ = id => document.getElementById(id);
 const viewport = $('viewport');
@@ -24,7 +27,7 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.26;
 renderer.localClippingEnabled = true;
-renderer.domElement.setAttribute('aria-label','宿舍三维模型，拖动旋转，滚轮缩放，点击部件查询尺寸');
+renderer.domElement.setAttribute('aria-label','宿舍三维模型，拖动旋转，滚轮缩放，点击部件查询尺寸，方向键或 WASD 移动位置');
 renderer.domElement.tabIndex = 0;
 viewport.prepend(renderer.domElement);
 const controls = new OrbitControls(camera,renderer.domElement);
@@ -55,6 +58,17 @@ let selection = {target:'room',bedNumber:null,object:dorm.room.parts.room};
 let activeMeasurement = null;
 let viewName='overall';
 let cameraAnimation=null;
+let focusedBed=null;
+let seatedBed=null;
+const wardrobeOpen=new Map([...dorm.units.keys()].map(number=>[number,false]));
+const keyboardExtended=new Map([...dorm.units.keys()].map(number=>[number,false]));
+const navigation=createKeyboardNavigation({camera,controls,element:renderer.domElement,onMove:()=>{cameraAnimation=null;}});
+const seated=createSeatedView({camera,controls,element:renderer.domElement,onChange:active=>{
+  document.body.dataset.seated=String(active);$('seated-controls').hidden=!active;
+  $('enter-seated').disabled=active;
+  if(!active){seatedBed=null;camera.fov=40;camera.updateProjectionMatrix();dimensionGroup.visible=true;}
+}});
+let previousFrameTime=null;
 let toastTimeout;
 const labelNodes=[];
 const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2();
@@ -70,12 +84,13 @@ function resolveObject(target,bedNumber) {
   return target==='unit'?unit.group:unit.parts[target];
 }
 function select(target,bedNumber=null,object=null) {
+  leaveFocus();
   const resolved=object||resolveObject(target,bedNumber);
   if(!resolved)return;
   selection={target,bedNumber:bedNumber?Number(bedNumber):null,object:resolved};
   activeMeasurement=null;
   $('selection-title').textContent=(selection.bedNumber?`${selection.bedNumber}号床 · `:'')+(targetLabels[target]||'室内设施');
-  $('selection-subtitle').textContent=target==='unit'?'床、桌与收纳的手工尺寸':target==='fixture'||target==='chair'?'依据照片还原的部件':'点击下方尺寸可在模型中定位';
+  $('selection-subtitle').textContent=target==='unit'?'床、桌与收纳的手工尺寸':target==='fixture'||target==='chair'?'依据照片还原的部件':'已显示实测标注，点选记录可靠近对应位置';
   $('component-select').value=target==='fixture'||target==='chair'?'unit':target;
   if(selection.bedNumber)$('bed-select').value=String(selection.bedNumber);
   else $('bed-select').value='all';
@@ -89,7 +104,7 @@ function select(target,bedNumber=null,object=null) {
     const value=document.createElement('strong');value.textContent=formatMeasurement(record);
     const note=document.createElement('small');note.textContent=record.qualifier;
     button.append(label,value,note);
-    button.addEventListener('click',()=>selectMeasurement(record.id));
+    button.addEventListener('click',()=>selectMeasurement(record.id,true));
     $('measurement-list').append(button);
   });
   if(!rows.length){const empty=document.createElement('p');empty.className='empty-measurements';empty.textContent='这个部件没有实测尺寸记录。';$('measurement-list').append(empty);}
@@ -97,14 +112,21 @@ function select(target,bedNumber=null,object=null) {
   if(target==='ladder')$('selection-subtitle').textContent=`${resolved.userData.bedNumbers.join('、')}号床使用 · 梯子垂直地面`;
   document.querySelector('.detail-panel').scrollTop=0;
   refreshSelection();
+  if(rows.length&&target!=='unit')selectMeasurement(rows[0].id);
+  if($('measurement-search').value)renderSearchResults();
+  setMobilePanel('details');
 }
-function selectMeasurement(id) {
+function selectMeasurement(id,focus=false) {
   const record=measurements.find(x=>x.id===id);if(!record)return;
   activeMeasurement=record;
+  $('toggle-measures').checked=true;
   document.querySelectorAll('[data-measurement]').forEach(row=>row.classList.toggle('active',row.dataset.measurement===id));
   refreshSelection();
+  if(focus){focusSelection();if(!seated.active&&window.matchMedia('(max-width:760px)').matches)document.querySelector('.model-panel').scrollIntoView({block:'start',behavior:'smooth'});}
 }
 function refreshSelection() {
+  if(seated.active){selectionBox.visible=false;dimensionGroup.visible=false;dimensionLabel.hidden=true;return;}
+  dimensionGroup.visible=true;
   const object=activeMeasurement?resolveObject(activeMeasurement.target,selection.bedNumber):selection.object;
   const canShow=object&&visible(object);
   selectionBox.visible=Boolean(canShow&&selection.target!=='room'&&selection.target!=='aisle');
@@ -133,23 +155,75 @@ function drawDimension(record,object) {
   dimensionLabel._position=(anchor||a.clone().lerp(b,.5)).clone().add(new THREE.Vector3(0,.08,0));
 }
 function focusSelection() {
+  if(seated.active){toast('坐姿位置已固定，离开座位后可聚焦查看尺寸。');return;}
   let object=activeMeasurement?resolveObject(activeMeasurement.target,selection.bedNumber):selection.object;
   if(!object)return;
+  const target=activeMeasurement?.target||selection.target;
   if(selection.bedNumber) {
+    focusedBed=selection.bedNumber;
+    dorm.units.forEach((unit,number)=>{unit.group.visible=number===focusedBed;});
+    dorm.ladders.forEach(ladder=>{ladder.visible=target==='ladder'&&ladder===object;});
+    $('leave-focus').hidden=false;
     $('toggle-walls').checked=false;
-    if(selection.target!=='bed'&&selection.target!=='unit')$('toggle-beds').checked=false;
-    if(selection.target==='wardrobe')$('toggle-doors').checked=true;
+    $('toggle-beds').checked=target==='bed'||target==='unit';
+    if(target==='wardrobe')setWardrobeOpen(selection.bedNumber,true);
+    $('clip-enable').checked=false;
     updateVisibility();
   }
   const bounds=new THREE.Box3().setFromObject(object),center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3());
+  if(activeMeasurement&&/\.(zone\d|level\d)/.test(activeMeasurement.id)) {
+    const dimension=dimensionFor(activeMeasurement,object,dorm.units.get(selection.bedNumber||1));
+    if(dimension.a&&dimension.b)center.copy(dimension.a).lerp(dimension.b,.5);
+  }
   camera.fov=40;camera.updateProjectionMatrix();
   const dist=Math.max(size.length()*.85,Math.max(size.y,size.x/camera.aspect)/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)))*1.35,1.6);
   let pos=center.clone().add(new THREE.Vector3(2,1.4,-2).normalize().multiplyScalar(dist));
-  if(selection.bedNumber)pos=center.clone().add(new THREE.Vector3(dorm.units.get(selection.bedNumber).layout.side==='left'?-dist:dist,dist*.4,-dist*.25));
+  if(selection.bedNumber) {
+    const side=dorm.units.get(selection.bedNumber).layout.side==='left'?-1:1;
+    pos=center.clone().add(new THREE.Vector3(side*Math.min(dist,2.1),target==='bed'?dist*.65:dist*.12,0));
+  }
   moveCamera(pos,center);document.querySelectorAll('.view-button').forEach(b=>{b.classList.remove('active');b.setAttribute('aria-pressed','false');});
 }
+
+function leaveFocus() {
+  focusedBed=null;
+  dorm.units.forEach(unit=>{unit.group.visible=true;});
+  dorm.ladders.forEach(ladder=>{ladder.visible=true;});
+  $('leave-focus').hidden=true;
+}
+$('leave-focus').addEventListener('click',()=>setView('overall'));
+
+function renderSearchResults() {
+  const query=$('measurement-search').value.trim();
+  const result=searchMeasurements(query);
+  const bedNumber=result.bedNumber||selection.bedNumber||1;
+  const container=$('measurement-search-results');container.replaceChildren();container.hidden=!query;
+  $('clear-search').hidden=!query;
+  $('measurement-search-status').textContent=query?`找到 ${result.records.length} 项实测记录 · 家具定位到 ${bedNumber} 号床`:'';
+  for(const record of result.records) {
+    const button=document.createElement('button');button.type='button';
+    const label=document.createElement('span');label.textContent=record.label;
+    const value=document.createElement('strong');value.textContent=formatMeasurement(record);
+    button.append(label,value);
+    button.addEventListener('click',()=>{
+      const roomTarget=['room','aisle','balcony'].includes(record.target);
+      $('measurement-search').value='';container.hidden=true;$('clear-search').hidden=true;
+      select(record.target,roomTarget?null:bedNumber);
+      selectMeasurement(record.id,true);
+      $('measurement-search-status').textContent=`已定位：${roomTarget?'':`${bedNumber}号床 · `}${record.label}`;
+    });
+    container.append(button);
+  }
+  if(query&&!result.records.length){const empty=document.createElement('p');empty.className='empty-measurements';empty.textContent='没有匹配的实测记录，可试试“衣柜”“第二格”或“床板厚度”。';container.append(empty);}
+}
+$('measurement-search').addEventListener('input',renderSearchResults);
+$('measurement-search').addEventListener('keydown',event=>{if(event.key==='Enter'){$('measurement-search-results').querySelector('button')?.click();event.preventDefault();}});
+$('clear-search').addEventListener('click',()=>{$('measurement-search').value='';renderSearchResults();$('measurement-search').focus();});
 function moveCamera(position,target) {cameraAnimation={start:performance.now(),fromP:camera.position.clone(),toP:position,fromT:controls.target.clone(),toT:target};}
 function setView(view,animate=true) {
+  if(seated.active)seated.exit();
+  $('status').textContent='模型就绪 · 6 个床位 · 45 项实测记录';
+  leaveFocus();
   viewName=view;
   document.body.dataset.view=view;
   const positions={overall:[7.7,7.6,-6.6],plan:[0,12.6,3.62],entrance:[0,1.42,.09],balcony:[0,1.45,6.41]};
@@ -170,13 +244,60 @@ function updateVisibility() {
   dorm.room.ceiling.visible=$('toggle-walls').checked&&viewName!=='plan';
   dorm.room.fixtures.children.filter(o=>o.name==='Wall outlet').forEach(o=>{o.visible=$('toggle-walls').checked;});
   dorm.units.forEach(unit=>{unit.parts.bed.visible=$('toggle-beds').checked;});
-  dorm.doors.forEach(door=>{door.pivot.rotation.y=$('toggle-doors').checked?door.openAngle:door.closedAngle;});
+  dorm.units.forEach((unit,number)=>unit.doors.forEach(door=>{door.pivot.rotation.y=wardrobeOpen.get(number)?door.openAngle:door.closedAngle;}));
   const enabled=$('clip-enable').checked;
   clipPlane.constant=.15+Number($('clip-height').value)/100*2.5;
   allMaterials.forEach(material=>{material.clippingPlanes=enabled?[clipPlane]:null;material.clipShadows=true;material.needsUpdate=true;});
   $('clip-height').disabled=!enabled;
   dorm.model.updateMatrixWorld(true);refreshSelection();
 }
+
+function setWardrobeOpen(number,open) {
+  if(number===null)dorm.units.forEach((_,key)=>wardrobeOpen.set(key,open));
+  else wardrobeOpen.set(number,open);
+  const count=[...wardrobeOpen.values()].filter(Boolean).length;
+  $('toggle-doors').checked=count===dorm.units.size;
+  $('toggle-doors').indeterminate=count>0&&count<dorm.units.size;
+}
+function enterSeated() {
+  const number=selection.bedNumber||1;
+  const unit=dorm.units.get(number);
+  if(!unit)return;
+  leaveFocus();cameraAnimation=null;navigation.clear();
+  $('toggle-walls').checked=true;$('toggle-beds').checked=true;$('clip-enable').checked=false;
+  viewName='seated';document.body.dataset.view='seated';
+  updateVisibility();
+  const eye=unit.parts.chair.getObjectByName('seated-eye').getWorldPosition(new THREE.Vector3());
+  const desktopBounds=new THREE.Box3().setFromObject(unit.parts.desk.getObjectByName('desktop'));
+  const target=desktopBounds.getCenter(new THREE.Vector3());target.y=desktopBounds.max.y;
+  camera.fov=75;camera.updateProjectionMatrix();
+  seatedBed=number;seated.enter({position:eye,target});
+  $('seated-status').textContent=`${number}号床 · 坐姿环顾 · 位置固定`;
+  $('status').textContent='坐姿模式 · 方向键 / WASD 转头 · 点击键盘架或衣柜互动';
+  document.querySelectorAll('.view-button').forEach(button=>{button.classList.remove('active');button.setAttribute('aria-pressed','false');});
+  selectionBox.visible=false;dimensionGroup.visible=false;dimensionLabel.hidden=true;
+  if(window.matchMedia('(max-width:760px)').matches)document.querySelector('.model-panel').scrollIntoView({block:'start',behavior:'smooth'});
+}
+function exitSeated() {
+  seated.exit();dimensionGroup.visible=true;
+  setView('overall');refreshSelection();
+  $('status').textContent='模型就绪 · 6 个床位 · 45 项实测记录';
+}
+$('enter-seated').addEventListener('click',enterSeated);
+$('exit-seated').addEventListener('click',exitSeated);
+document.querySelectorAll('[data-look]').forEach(button=>{
+  button.addEventListener('pointerdown',event=>{
+    event.preventDefault();button.setPointerCapture(event.pointerId);renderer.domElement.focus({preventScroll:true});
+    const vectors={up:[0,1],down:[0,-1],left:[-1,0],right:[1,0]};const [horizontal,vertical]=vectors[button.dataset.look];
+    seated.setLookInput({horizontal,vertical});
+  });
+  for(const type of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(type,()=>seated.setLookInput({horizontal:0,vertical:0}));
+});
+function setMobilePanel(panel) {
+  document.body.dataset.mobilePanel=panel;
+  document.querySelectorAll('button[data-mobile-panel]').forEach(button=>{const active=button.dataset.mobilePanel===panel;button.setAttribute('aria-pressed',String(active));button.classList.toggle('active',active);});
+}
+document.querySelectorAll('button[data-mobile-panel]').forEach(button=>button.addEventListener('click',()=>setMobilePanel(button.dataset.mobilePanel)));
 function addLabels() {
   for(const [number,unit] of dorm.units) {
     const button=document.createElement('button');button.type='button';button.className='bed-label';button.textContent=`${number}号床`;
@@ -195,23 +316,30 @@ function projectNode(node,position) {
 function resize() {const width=viewport.clientWidth,height=viewport.clientHeight;renderer.setSize(width,height);camera.aspect=width/height;camera.updateProjectionMatrix();}
 new ResizeObserver(resize).observe(viewport);
 let down=null;
-renderer.domElement.addEventListener('pointerdown',event=>{down={x:event.clientX,y:event.clientY};cameraAnimation=null;});
+renderer.domElement.addEventListener('pointerdown',event=>{renderer.domElement.focus({preventScroll:true});down={x:event.clientX,y:event.clientY};cameraAnimation=null;});
 renderer.domElement.addEventListener('pointerup',event=>{
-  if(!down||Math.hypot(event.clientX-down.x,event.clientY-down.y)>6)return;
+  if(!down||Math.hypot(event.clientX-down.x,event.clientY-down.y)>6||(seated.active&&seated.didDrag))return;
   const rect=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
   raycaster.setFromCamera(pointer,camera);
   const hits=raycaster.intersectObject(dorm.model,true).filter(hit=>visible(hit.object)&&(!$('clip-enable').checked||hit.point.y<=clipPlane.constant));
-  for(const hit of hits){let node=hit.object;while(node&&!node.userData.target)node=node.parent;if(node?.userData.target){let owner=node;while(owner&&!owner.userData.bedNumber)owner=owner.parent;select(node.userData.target,owner?.userData.bedNumber,node);break;}}
+  for(const hit of hits){let node=hit.object;while(node&&!node.userData.target)node=node.parent;if(node?.userData.target){let owner=node;while(owner&&!owner.userData.bedNumber)owner=owner.parent;
+    const number=owner?.userData.bedNumber,target=node.userData.target;
+    if(seated.active&&number===seatedBed) {
+      if(target==='keyboard'){const open=!keyboardExtended.get(number);keyboardExtended.set(number,open);toast(open?'键盘架已拉出':'键盘架已收回');}
+      if(target==='wardrobe'){const open=!wardrobeOpen.get(number);setWardrobeOpen(number,open);updateVisibility();toast(open?'衣柜已打开':'衣柜已关闭');}
+    }
+    select(target,number,node);break;
+  }}
 });
-renderer.domElement.addEventListener('keydown',e=>{if(e.key==='Escape'){setView('overall');select('room');}if(e.key.toLowerCase()==='f')focusSelection();});
+renderer.domElement.addEventListener('keydown',e=>{if(e.key==='Escape'){if(seated.active)exitSeated();else{setView('overall');select('room');}}if(e.key.toLowerCase()==='f')focusSelection();});
 for(const view of ['overall','plan','entrance','balcony'])$(`view-${view}`).addEventListener('click',()=>setView(view));
-for(const id of ['toggle-walls','toggle-beds','toggle-doors','toggle-measures','clip-enable'])$(id).addEventListener('change',updateVisibility);
+for(const id of ['toggle-walls','toggle-beds','toggle-doors','toggle-measures','clip-enable'])$(id).addEventListener('change',()=>{if(id==='toggle-doors')setWardrobeOpen(null,$('toggle-doors').checked);updateVisibility();});
 $('clip-height').addEventListener('input',updateVisibility);
 $('bed-select').addEventListener('change',event=>{const num=event.target.value;select(num==='all'?'room':'unit',num==='all'?null:num);});
 $('component-select').addEventListener('change',event=>{const t=event.target.value;select(t,['room','aisle','balcony'].includes(t)?null:selection.bedNumber||1);});
 document.querySelectorAll('[data-bed]').forEach(button=>button.addEventListener('click',()=>select('unit',Number(button.dataset.bed))));
 $('focus-selection').addEventListener('click',focusSelection);
-$('reset-view').addEventListener('click',()=>{$('clip-enable').checked=false;$('toggle-doors').checked=false;$('toggle-measures').checked=true;setView('overall');select('room');});
+$('reset-view').addEventListener('click',()=>{$('clip-enable').checked=false;setWardrobeOpen(null,false);$('toggle-measures').checked=true;setView('overall');select('room');});
 
 async function exportGLB(download=true) {
   const clone=dorm.model.clone(true);
@@ -250,9 +378,19 @@ $('reference-close').addEventListener('click',()=>$('reference-dialog').close())
 $('reference-dialog').addEventListener('click',event=>{if(event.target===$('reference-dialog'))$('reference-dialog').close();});
 
 function render(time) {
+  const delta=previousFrameTime===null?0:Math.min((time-previousFrameTime)/1000,.05);previousFrameTime=time;
+  if(seated.active)seated.update(delta);else navigation.update(delta);
   if(cameraAnimation){const t=Math.min((time-cameraAnimation.start)/650,1),e=1-(1-t)**3;camera.position.lerpVectors(cameraAnimation.fromP,cameraAnimation.toP,e);controls.target.lerpVectors(cameraAnimation.fromT,cameraAnimation.toT,e);if(t===1)cameraAnimation=null;}
-  controls.update();
-  labelNodes.forEach(({node,position,number})=>{const p=position.clone();if(!$('toggle-beds').checked)p.y=.83;projectNode(node,p);node.hidden=!$('toggle-measures').checked;node.classList.toggle('active',selection.bedNumber===number);});
+  if(!seated.active)controls.update();
+  let furnitureMoving=false;
+  dorm.units.forEach((unit,number)=>{
+    const slide=unit.keyboardSlide;
+    const target=keyboardExtended.get(number)?slide.openPosition:slide.closedPosition;
+    if(slide.object.position.distanceToSquared(target)>1e-8){slide.object.position.lerp(target,1-Math.exp(-14*delta));furnitureMoving=true;}
+    else slide.object.position.copy(target);
+  });
+  if(furnitureMoving){dorm.model.updateMatrixWorld(true);refreshSelection();}
+  labelNodes.forEach(({node,position,number})=>{const p=position.clone();if(!$('toggle-beds').checked)p.y=.83;projectNode(node,p);node.hidden=seated.active||!$('toggle-measures').checked||(focusedBed!==null&&focusedBed!==number);node.classList.toggle('active',selection.bedNumber===number);});
   if(activeMeasurement&&!dimensionLabel.hidden)projectNode(dimensionLabel,dimensionLabel._position);
   renderer.render(scene,camera);
 }
@@ -265,7 +403,9 @@ window.__dorm3d={
   ready:true,select,selectMeasurement,setView,exportGLB,
   getSelection:()=>({target:selection.target,bedNumber:selection.bedNumber,measurement:activeMeasurement?.id}),
   getMetrics:()=>({units:dorm.units.size,ladders:dorm.ladders.length,measurements:measurements.length,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles}),
-  getPartScreenPoint:(target,number)=>{const object=resolveObject(target,number);const p=new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3()).project(camera);const r=renderer.domElement.getBoundingClientRect();return {x:r.left+(p.x*.5+.5)*r.width,y:r.top+(-p.y*.5+.5)*r.height};},
+  getCameraState:()=>({position:camera.position.toArray(),target:controls.target.toArray()}),
+  getInteractionState:()=>({seated:seated.active,seatedBed,focusedBed,wardrobes:Object.fromEntries(wardrobeOpen),keyboards:Object.fromEntries(keyboardExtended)}),
+  getPartScreenPoint:(target,number,meshName)=>{const part=resolveObject(target,number);const object=meshName?part.getObjectByName(meshName):part;const p=new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3()).project(camera);const r=renderer.domElement.getBoundingClientRect();return {x:r.left+(p.x*.5+.5)*r.width,y:r.top+(-p.y*.5+.5)*r.height};},
   getVisibility:()=>({walls:dorm.room.walls.visible,beds:[...dorm.units.values()].every(u=>u.parts.bed.visible),doorsOpen:$('toggle-doors').checked,clipped:$('clip-enable').checked}),
 };
 
