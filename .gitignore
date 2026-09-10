@@ -1,0 +1,6 @@
+node_modules/
+dist/
+/pictures/
+.env.local
+test-results/
+.DS_Store

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#253d35" />
+    <meta name="description" content="北京邮电大学学生十公寓宿舍交互式空间模型，支持实测尺寸查询、空间剖切与模型导出。" />
+    <title>Dorm3D · 十公寓空间档案</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <svg aria-hidden="true" class="icon-library" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="icon-cube" viewBox="0 0 24 24"><path d="m12 3 9 5v8l-9 5-9-5V8l9-5Z M3 8l9 5 9-5 M12 13v8 M7.5 5.5l9 5" /></symbol>
+      <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6" /></symbol>
+      <symbol id="icon-reset" viewBox="0 0 24 24"><path d="M3 10a9 9 0 1 1 2 8 M3 4v6h6" /></symbol>
+      <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5 M4 16v5h16v-5" /></symbol>
+      <symbol id="icon-camera" viewBox="0 0 24 24"><path d="M3 7h5l2-3h4l2 3h5v14H3V7Z" /><circle cx="12" cy="13" r="4" /></symbol>
+      <symbol id="icon-focus" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /><circle cx="12" cy="12" r="3" /></symbol>
+      <symbol id="icon-photo" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="m3 16 5-5 6 6 3-3 4 4" /><circle cx="15.5" cy="8.5" r="1.5" /></symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
+      <symbol id="icon-measure" viewBox="0 0 24 24"><path d="m3 16 13-13 5 5L8 21l-5-5Z M13 6l3 3m-6 0 2 2m-5 1 3 3m-6 0 2 2" /></symbol>
+      <symbol id="icon-orbit" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-30 12 12)" /><circle cx="12" cy="12" r="3" /></symbol>
+    </svg>
+
+    <header class="app-header">
+      <a class="brand" href="./" aria-label="Dorm3D 首页">
+        <span class="brand-mark"><svg class="icon"><use href="#icon-cube" /></svg></span>
+        <span class="brand-name">Dorm<span>3D</span><span class="brand-caption">空间实录 / SPACE ARCHIVE</span></span>
+      </a>
+      <div class="project-heading"><span class="project-eyebrow">北京邮电大学</span><h1>十公寓空间档案</h1></div>
+      <div class="header-actions"><span class="local-badge"><i></i>本地模型</span><button id="reference-open" class="button button-quiet" type="button"><svg class="icon"><use href="#icon-photo" /></svg><span>参考照片</span><span id="reference-count" class="button-count">0</span></button></div>
+    </header>
+
+    <main class="workspace">
+      <aside class="control-panel" aria-label="模型视图控制">
+        <div class="panel-title"><span class="eyebrow">EXPLORER</span><h2>探索空间</h2><p>从一间寝室，读懂每一处细节。</p></div>
+
+        <section class="control-section view-section" aria-labelledby="view-heading">
+          <div class="section-heading"><h3 id="view-heading">观察视角</h3><span>01</span></div>
+          <div class="view-buttons" role="group" aria-label="切换观察视角">
+            <button type="button" id="view-overall" class="view-button active" aria-pressed="true"><svg class="icon"><use href="#icon-cube" /></svg>整体透视</button>
+            <button type="button" id="view-plan" class="view-button" aria-pressed="false"><span class="plan-icon" aria-hidden="true"></span>俯视平面</button>
+            <button type="button" id="view-entrance" class="view-button" aria-pressed="false"><span class="door-icon" aria-hidden="true"></span>入口视角</button>
+            <button type="button" id="view-balcony" class="view-button" aria-pressed="false"><span class="window-icon" aria-hidden="true"></span>阳台视角</button>
+          </div>
+        </section>
+
+        <section class="control-section" aria-labelledby="bed-heading">
+          <div class="section-heading"><h3 id="bed-heading">床位定位</h3><span>02</span></div>
+          <div id="bed-map" class="bed-map" aria-label="床位平面图，入口在下方">
+            <span class="map-balcony">阳台</span>
+            <div class="map-room"><div class="map-side"><button type="button" data-bed="3" aria-label="定位 3 号床"><span>03</span><i></i></button><button type="button" data-bed="2" aria-label="定位 2 号床"><span>02</span><i></i></button><button type="button" data-bed="1" aria-label="定位 1 号床"><span>01</span><i></i></button></div><div class="map-aisle"><span>过<br />道</span><span class="map-arrow">↑</span></div><div class="map-side"><button type="button" data-bed="4" aria-label="定位 4 号床"><span>04</span><i></i></button><button type="button" data-bed="5" aria-label="定位 5 号床"><span>05</span><i></i></button><button type="button" data-bed="6" aria-label="定位 6 号床"><span>06</span><i></i></button></div></div>
+            <span class="map-entrance">入口</span>
+          </div>
+          <div class="select-row"><label for="bed-select">当前床位</label><select id="bed-select"><option value="all">全部床位</option><option value="1">1 号床</option><option value="2">2 号床</option><option value="3">3 号床</option><option value="4">4 号床</option><option value="5">5 号床</option><option value="6">6 号床</option></select></div>
+          <div class="select-row"><label for="component-select">定位部件</label><select id="component-select"><option value="unit">整组家具</option><option value="bed">床铺</option><option value="wardrobe">衣柜</option><option value="desk">书桌</option><option value="keyboard">键盘托盘</option><option value="drawer">抽屉</option><option value="computerCabinet">电脑柜</option><option value="bookshelf">桌上书架</option><option value="bookcase">侧边书柜</option><option value="ladder">床梯</option><option value="room">寝室空间</option><option value="aisle">中央过道</option><option value="balcony">阳台</option></select></div>
+        </section>
+
+        <section class="control-section" aria-labelledby="layers-heading">
+          <div class="section-heading"><h3 id="layers-heading">显示与剖切</h3><span>03</span></div>
+          <label class="switch-row" for="toggle-walls"><span>完整墙面</span><input id="toggle-walls" type="checkbox" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="switch-row" for="toggle-beds"><span>上层床铺</span><input id="toggle-beds" type="checkbox" checked /><span class="switch" aria-hidden="true"></span></label>
+          <label class="switch-row" for="toggle-doors"><span>打开柜门</span><input id="toggle-doors" type="checkbox" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="switch-row" for="toggle-measures"><span>位置标签</span><input id="toggle-measures" type="checkbox" checked /><span class="switch" aria-hidden="true"></span></label>
+          <div class="clip-control"><label class="switch-row" for="clip-enable"><span>水平剖切</span><input id="clip-enable" type="checkbox" /><span class="switch" aria-hidden="true"></span></label><label class="range-label" for="clip-height"><span>剖切位置</span><span>低 — 高</span></label><input id="clip-height" type="range" min="0" max="100" value="100" aria-label="调整水平剖切位置" /></div>
+        </section>
+
+        <div class="control-footer"><button id="reset-view" class="button button-outline full-width" type="button"><svg class="icon"><use href="#icon-reset" /></svg>重置视图</button><p>旋转、缩放，寻找你的观察角度。</p></div>
+      </aside>
+
+      <section class="model-panel" aria-label="寝室三维模型">
+        <div id="viewport" tabindex="0" aria-label="交互式寝室三维模型。拖动旋转，滚轮缩放，右键拖动平移，点击部件查询尺寸。">
+          <div id="model-labels" aria-label="模型位置标签"></div>
+          <div id="loading" role="status"><span class="loading-cube"><svg class="icon"><use href="#icon-cube" /></svg></span><strong>正在构建寝室空间</strong><span>准备模型与实测记录…</span></div>
+        </div>
+        <div class="viewport-heading"><div><span class="eyebrow">ROOM STUDY / 01</span><h2>六人寝室<span>上床下桌</span></h2></div><span class="dimension-pill">660 <span>×</span> 330 <small>cm</small></span></div>
+        <div class="viewport-caption"><span class="small-cross" aria-hidden="true">＋</span><span>依据现场照片与手工测量构建</span></div>
+        <div class="viewport-toolbar"><div class="mouse-hints"><span><svg class="icon"><use href="#icon-orbit" /></svg>拖动旋转</span><i></i><span>滚轮缩放</span><i></i><span>右键平移</span></div><span class="click-hint">点击部件 · 查看尺寸<svg class="icon"><use href="#icon-arrow" /></svg></span></div>
+        <div class="viewport-axis" aria-hidden="true"><span class="axis-y">Y</span><span class="axis-z">Z</span><span class="axis-x">X</span><i></i></div>
+      </section>
+
+      <aside class="detail-panel" aria-label="选中位置的实测尺寸">
+        <div class="detail-heading"><span class="eyebrow">MEASUREMENT</span><span class="record-badge"><i></i>实测档案</span></div>
+        <div class="selection-intro"><span class="selection-symbol"><svg class="icon"><use href="#icon-measure" /></svg></span><span class="selection-kicker">当前选中</span><h2 id="selection-title">寝室空间</h2><p id="selection-subtitle">北京邮电大学 · 学生十公寓</p></div>
+        <div class="measurement-heading"><h3>手工测量记录</h3><span id="selection-count">—</span></div>
+        <div id="measurement-list" class="measurement-list" aria-live="polite"></div>
+        <p id="selection-note" class="selection-note">点击模型部件，查看你的手工测量记录。估计参数不显示。</p>
+        <button id="focus-selection" class="button button-outline full-width" type="button"><svg class="icon"><use href="#icon-focus" /></svg>聚焦当前部件</button>
+        <div class="measurement-explainer"><span class="explainer-label">关于这份模型</span><p>尺寸卡片仅展示手工测量记录。照片中的细节用于还原空间，未实测的估计参数不展示。</p><p>柜体记录为内部尺寸；椅子已归位至桌前。</p></div>
+        <div class="export-section"><span class="eyebrow">TAKE IT WITH YOU</span><button id="export-glb" class="button button-primary full-width" type="button"><svg class="icon"><use href="#icon-download" /></svg>导出三维模型<span class="format-tag">GLB</span></button><button id="export-image" class="button button-quiet full-width" type="button"><svg class="icon"><use href="#icon-camera" /></svg>保存当前视图</button></div>
+      </aside>
+    </main>
+
+    <footer class="status-bar"><div><span class="status-dot"></span><span id="status" role="status">正在初始化模型</span></div><span>现场记录 · 空间重建<span class="footer-divider">/</span>Dorm3D</span></footer>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <dialog id="reference-dialog" aria-labelledby="reference-heading"><div class="dialog-heading"><div><span class="eyebrow">VISUAL REFERENCES</span><h2 id="reference-heading">现场参考照片</h2><p id="reference-description">原始照片中的椅子因清扫暂置于床上，模型已将椅子放回桌前。</p></div><button id="reference-close" class="button icon-button" type="button" aria-label="关闭参考照片"><svg class="icon"><use href="#icon-close" /></svg></button></div><div id="reference-grid" class="reference-grid"></div></dialog>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "dorm3d",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test tests/model.test.js",
+    "validate:export": "node tests/validate-export.mjs"
+  },
+  "dependencies": {
+    "three": "0.186.0"
+  },
+  "devDependencies": {
+    "gltf-validator": "2.0.0-dev.3.10",
+    "vite": "6.4.3"
+  }
+}

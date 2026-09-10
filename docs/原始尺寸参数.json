@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "unit": "cm",
+  "source": "docs/寝室空间尺寸.md",
+  "status": "原始手工测量，未经布局闭合校准",
+  "room": {
+    "length": 660,
+    "width": 330,
+    "includesBalcony": null,
+    "heightConfirmed": null,
+    "aisleBetweenLadders": 110,
+    "aisleBetweenDesktops": 200,
+    "balcony": { "length": 330, "width": 90 }
+  },
+  "bed": {
+    "width": 90,
+    "length": 190,
+    "measurementBoundary": null,
+    "deckTopHeight": 165,
+    "deckThickness": 5,
+    "deckToCeiling": 100,
+    "sideRailLength": 125,
+    "sideRailHeight": 30,
+    "headRailHeight": 32,
+    "upperOutletPresent": true
+  },
+  "ladder": {
+    "orientation": "vertical",
+    "distanceToWardrobeDoor": { "min": 38, "max": 40 },
+    "sharedByBedNumbers": [[1, 2], [4, 5]],
+    "individualBedNumbers": [3, 6],
+    "width": null,
+    "bedNumberPositions": null
+  },
+  "wardrobe": {
+    "dimensionsAreInternal": true,
+    "height": 150,
+    "width": 71,
+    "depth": 56,
+    "hangingWidth": 41,
+    "shelfWidth": 28,
+    "shelfDepth": 52,
+    "shelfClearHeightsTopToBottom": [36, 30, 40, 36],
+    "shelfCount": 3,
+    "panelThickness": null
+  },
+  "desk": {
+    "length": 91,
+    "depth": 58,
+    "topHeight": 75,
+    "includesSideBookcase": null,
+    "keyboardTray": { "length": 85, "depth": 38, "bottomHeight": 61 },
+    "drawerInternal": { "width": 23, "length": 38, "height": 12 },
+    "computerCabinetInternal": { "width": 30, "depth": 56, "height": 51 }
+  },
+  "bookshelf": {
+    "length": 91,
+    "depth": 25,
+    "bottomAboveDeskTop": 56
+  },
+  "bookcase": {
+    "length": 55,
+    "depth": 26,
+    "axisOrientation": null,
+    "tierHeightsAsRecorded": [24, 30, 24],
+    "tierNumberingDirection": null,
+    "outerHeight": null
+  },
+  "derivedCandidates": [
+    { "name": "roomHeight", "value": 265, "formula": "165 + 100", "condition": "两项测量采用同一床面基准，等待用户确认" },
+    { "name": "bedDeckBottom", "value": 160, "formula": "165 - 5", "condition": "床面高度165指床板上表面" },
+    { "name": "bookshelfBottom", "value": 131, "formula": "75 + 56", "condition": "56从桌面上表面量至书架底部" }
+  ]
+}
