@@ -12,7 +12,9 @@ import { createSeatedView } from './seated-view.js';
 
 const $ = id => document.getElementById(id);
 const viewport = $('viewport');
-const scene = new THREE.Scene(); scene.background = new THREE.Color('#e9eae2');
+const theme=getComputedStyle(document.documentElement);
+const viewColors={background:theme.getPropertyValue('--canvas').trim()||'#eef4fb',selection:theme.getPropertyValue('--focus').trim()||'#276bdf',dimension:theme.getPropertyValue('--brand').trim()||'#003399'};
+const scene = new THREE.Scene(); scene.background = new THREE.Color(viewColors.background);
 const camera = new THREE.PerspectiveCamera(40, 1, .03, 70);
 let renderer;
 try {
@@ -46,9 +48,9 @@ const fill = new THREE.DirectionalLight('#dcebf5',1.1); fill.position.set(5,4,-3
 for(const z of [1.7,4.9]) {const light = new THREE.PointLight('#fff5df',3.5,5,2);light.position.set(0,2.5,z);scene.add(light);}
 
 const dorm = buildDormitory(); scene.add(dorm.model);
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:'#e9eae2',roughness:1}));
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:viewColors.background,roughness:1}));
 ground.rotation.x = -Math.PI/2;ground.position.y=-.125;ground.receiveShadow=true;scene.add(ground);
-const selectionBox = new THREE.BoxHelper(new THREE.Object3D(), '#347b60');
+const selectionBox = new THREE.BoxHelper(new THREE.Object3D(), viewColors.selection);
 selectionBox.material.depthTest = false; selectionBox.material.transparent = true;selectionBox.material.opacity=.65;
 selectionBox.renderOrder=12;selectionBox.visible=false;scene.add(selectionBox);
 const dimensionGroup = new THREE.Group();scene.add(dimensionGroup);
@@ -144,7 +146,7 @@ function drawDimension(record,object) {
   const unit=dorm.units.get(selection.bedNumber||1);
   const {a,b,anchor}=dimensionFor(record,object,unit);
   if(a&&b) {
-    const material=new THREE.LineBasicMaterial({color:'#22694f',depthTest:false,transparent:true,opacity:.9});
+    const material=new THREE.LineBasicMaterial({color:viewColors.dimension,depthTest:false,transparent:true,opacity:.9});
     const direction=b.clone().sub(a).normalize();
     const tick=Math.abs(direction.y)>.8?new THREE.Vector3(.035,0,0):new THREE.Vector3(0,.035,0);
     const points=[a,b,a.clone().sub(tick),a.clone().add(tick),b.clone().sub(tick),b.clone().add(tick)];
