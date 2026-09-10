@@ -284,26 +284,40 @@ export function createFurniture({
   // Drawer and computer cabinet intentionally have different external widths.
   // Their measured interiors are 23 × 38 × 12 and 30 × 56 × 51 cm.
   const drawer = part('drawer');
+  const drawerCarriage = new THREE.Group();
+  drawerCarriage.name = 'drawer-moving-carriage';
+  drawer.add(drawerCarriage);
   const drawerBottom = 0.58;
   const drawerOuterWidth = 0.23 + 2 * skin;
   const drawerOuterDepth = 0.38 + 2 * skin;
   const drawerOuterHeight = 0.12 + 2 * skin;
   const drawerFrontZ = 0.633;
   const drawerZ = drawerFrontZ - drawerOuterDepth / 2;
+  // The stationary cover completes the closed outer silhouette. The moving
+  // box rim stops at its underside, leaving a true 12 cm open interior when
+  // pulled out; its taller front fascia retains the original closed face.
+  const drawerBoxHeight = drawerOuterHeight - skin;
+  const drawerBoxDepth = drawerOuterDepth - skin;
+  const drawerBoxZ = drawerZ - skin / 2;
   for (const x of [sideX - drawerOuterWidth / 2 + skin / 2, sideX + drawerOuterWidth / 2 - skin / 2]) {
-    box(drawer, 'drawer-side', skin, drawerOuterHeight, drawerOuterDepth,
-      x, drawerBottom + drawerOuterHeight / 2, drawerZ);
+    box(drawerCarriage, 'drawer-side', skin, drawerBoxHeight, drawerBoxDepth,
+      x, drawerBottom + drawerBoxHeight / 2, drawerBoxZ);
   }
-  box(drawer, 'drawer-bottom', 0.23, skin, 0.38,
+  box(drawerCarriage, 'drawer-bottom', 0.23, skin, 0.38,
     sideX, drawerBottom + skin / 2, drawerZ, woodDark);
-  box(drawer, 'drawer-top', 0.23, skin, 0.38,
-    sideX, drawerBottom + drawerOuterHeight - skin / 2, drawerZ);
-  for (const z of [drawerFrontZ - drawerOuterDepth + skin / 2, drawerFrontZ - skin / 2]) {
-    box(drawer, 'drawer-front-or-back', 0.23, drawerOuterHeight, skin,
-      sideX, drawerBottom + drawerOuterHeight / 2, z);
-  }
-  horizontalHandle(drawer, 'drawer-handle', sideX,
+  box(drawer, 'drawer-top', drawerOuterWidth, skin, drawerBoxDepth,
+    sideX, drawerBottom + drawerOuterHeight - skin / 2, drawerBoxZ);
+  box(drawerCarriage, 'drawer-front-or-back', 0.23, drawerBoxHeight, skin,
+    sideX, drawerBottom + drawerBoxHeight / 2, drawerFrontZ - drawerOuterDepth + skin / 2);
+  box(drawerCarriage, 'drawer-front-or-back', drawerOuterWidth, drawerOuterHeight, skin,
+    sideX, drawerBottom + drawerOuterHeight / 2, drawerFrontZ - skin / 2);
+  horizontalHandle(drawerCarriage, 'drawer-handle', sideX,
     drawerBottom + drawerOuterHeight / 2 + 0.006, drawerFrontZ + 0.002);
+  const drawerSlide = {
+    object: drawerCarriage,
+    closedPosition: new THREE.Vector3(0, 0, 0),
+    openPosition: new THREE.Vector3(0, 0, 0.24),
+  };
 
   const computerCabinet = part('computerCabinet');
   const computerWidth = 0.30 + 2 * skin;
@@ -393,5 +407,5 @@ export function createFurniture({
     }
   }
 
-  return { group, doors, parts, keyboardSlide };
+  return { group, doors, parts, keyboardSlide, drawerSlide };
 }

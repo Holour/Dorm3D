@@ -503,3 +503,43 @@ test('六床键盘架向过道拉出且外滑轨固定，活动标线与各自�
     }
   }
 });
+
+test('六床抽屉独立向过道抽拉，顶板固定且三条内尺寸标线跟随开口箱体', () => {
+  const dormitory = buildDormitory();
+  for (const [number, unit] of dormitory.units) {
+    const slide = unit.drawerSlide;
+    assert.ok(slide?.object?.isObject3D, 'Each drawer needs its own moving box');
+    const part = unit.parts.drawer;
+    const floor = onlyMesh(part, 'drawer-bottom');
+    const fixedTop = onlyMesh(part, 'drawer-top');
+    slide.object.position.copy(slide.closedPosition);
+    dormitory.model.updateMatrixWorld(true);
+    const start = floor.getWorldPosition(new THREE.Vector3());
+    const fixed = fixedTop.getWorldPosition(new THREE.Vector3());
+    const records = ['drawer.innerWidth', 'drawer.innerLength', 'drawer.innerHeight'].map(id => byId.get(id));
+    const lines = records.map(record => dimensionFor(record, part, unit));
+    slide.object.position.copy(slide.openPosition);
+    dormitory.model.updateMatrixWorld(true);
+    const motion = floor.getWorldPosition(new THREE.Vector3()).sub(start);
+    const origin = unit.group.localToWorld(new THREE.Vector3());
+    const aisle = unit.group.localToWorld(new THREE.Vector3(0, 0, 1)).sub(origin).normalize();
+    assert.ok(motion.dot(aisle) > 0, 'Drawer extends towards the aisle on both mirrored rows');
+    near(motion.clone().cross(aisle).length(), 0, 'Drawer movement follows its depth axis');
+    near(fixedTop.getWorldPosition(new THREE.Vector3()).distanceTo(fixed), 0, 'Housing top stays fixed');
+    records.forEach((record, index) => {
+      const line = dimensionFor(record, part, unit);
+      near(line.a.distanceTo(line.b), record.value / 100, 'Open drawer keeps its measured inner dimensions');
+      for (const endpoint of ['a', 'b']) {
+        near(line[endpoint].clone().sub(lines[index][endpoint]).distanceTo(motion), 0,
+          'Both dimension endpoints follow the drawer rather than its housing');
+      }
+    });
+    for (const [otherNumber, other] of dormitory.units) {
+      if (otherNumber !== number) near(other.drawerSlide.object.position.distanceTo(other.drawerSlide.closedPosition), 0,
+        'Other beds remain closed');
+    }
+    slide.object.position.copy(slide.closedPosition);
+    dormitory.model.updateMatrixWorld(true);
+    near(floor.getWorldPosition(new THREE.Vector3()).distanceTo(start), 0, 'Drawer returns to its original closed position');
+  }
+});

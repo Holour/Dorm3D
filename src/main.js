@@ -62,6 +62,7 @@ let focusedBed=null;
 let seatedBed=null;
 const wardrobeOpen=new Map([...dorm.units.keys()].map(number=>[number,false]));
 const keyboardExtended=new Map([...dorm.units.keys()].map(number=>[number,false]));
+const drawerExtended=new Map([...dorm.units.keys()].map(number=>[number,false]));
 const navigation=createKeyboardNavigation({camera,controls,element:renderer.domElement,onMove:()=>{cameraAnimation=null;}});
 const seated=createSeatedView({camera,controls,element:renderer.domElement,onChange:active=>{
   document.body.dataset.seated=String(active);$('seated-controls').hidden=!active;
@@ -273,7 +274,7 @@ function enterSeated() {
   camera.fov=75;camera.updateProjectionMatrix();
   seatedBed=number;seated.enter({position:eye,target});
   $('seated-status').textContent=`${number}号床 · 坐姿环顾 · 位置固定`;
-  $('status').textContent='坐姿模式 · 方向键 / WASD 转头 · 点击键盘架或衣柜互动';
+  $('status').textContent='坐姿模式 · 方向键 / WASD 转头 · 点击键盘架、抽屉或衣柜互动';
   document.querySelectorAll('.view-button').forEach(button=>{button.classList.remove('active');button.setAttribute('aria-pressed','false');});
   selectionBox.visible=false;dimensionGroup.visible=false;dimensionLabel.hidden=true;
   if(window.matchMedia('(max-width:760px)').matches)document.querySelector('.model-panel').scrollIntoView({block:'start',behavior:'smooth'});
@@ -326,6 +327,7 @@ renderer.domElement.addEventListener('pointerup',event=>{
     const number=owner?.userData.bedNumber,target=node.userData.target;
     if(seated.active&&number===seatedBed) {
       if(target==='keyboard'){const open=!keyboardExtended.get(number);keyboardExtended.set(number,open);toast(open?'键盘架已拉出':'键盘架已收回');}
+      if(target==='drawer'){const open=!drawerExtended.get(number);drawerExtended.set(number,open);toast(open?'抽屉已拉出':'抽屉已收回');}
       if(target==='wardrobe'){const open=!wardrobeOpen.get(number);setWardrobeOpen(number,open);updateVisibility();toast(open?'衣柜已打开':'衣柜已关闭');}
     }
     select(target,number,node);break;
@@ -384,10 +386,11 @@ function render(time) {
   if(!seated.active)controls.update();
   let furnitureMoving=false;
   dorm.units.forEach((unit,number)=>{
-    const slide=unit.keyboardSlide;
-    const target=keyboardExtended.get(number)?slide.openPosition:slide.closedPosition;
-    if(slide.object.position.distanceToSquared(target)>1e-8){slide.object.position.lerp(target,1-Math.exp(-14*delta));furnitureMoving=true;}
-    else slide.object.position.copy(target);
+    for(const [slide,extended] of [[unit.keyboardSlide,keyboardExtended],[unit.drawerSlide,drawerExtended]]) {
+      const target=extended.get(number)?slide.openPosition:slide.closedPosition;
+      if(slide.object.position.distanceToSquared(target)>1e-8){slide.object.position.lerp(target,1-Math.exp(-14*delta));furnitureMoving=true;}
+      else slide.object.position.copy(target);
+    }
   });
   if(furnitureMoving){dorm.model.updateMatrixWorld(true);refreshSelection();}
   labelNodes.forEach(({node,position,number})=>{const p=position.clone();if(!$('toggle-beds').checked)p.y=.83;projectNode(node,p);node.hidden=seated.active||!$('toggle-measures').checked||(focusedBed!==null&&focusedBed!==number);node.classList.toggle('active',selection.bedNumber===number);});
@@ -404,7 +407,7 @@ window.__dorm3d={
   getSelection:()=>({target:selection.target,bedNumber:selection.bedNumber,measurement:activeMeasurement?.id}),
   getMetrics:()=>({units:dorm.units.size,ladders:dorm.ladders.length,measurements:measurements.length,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles}),
   getCameraState:()=>({position:camera.position.toArray(),target:controls.target.toArray()}),
-  getInteractionState:()=>({seated:seated.active,seatedBed,focusedBed,wardrobes:Object.fromEntries(wardrobeOpen),keyboards:Object.fromEntries(keyboardExtended)}),
+  getInteractionState:()=>({seated:seated.active,seatedBed,focusedBed,wardrobes:Object.fromEntries(wardrobeOpen),keyboards:Object.fromEntries(keyboardExtended),drawers:Object.fromEntries(drawerExtended)}),
   getPartScreenPoint:(target,number,meshName)=>{const part=resolveObject(target,number);const object=meshName?part.getObjectByName(meshName):part;const p=new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3()).project(camera);const r=renderer.domElement.getBoundingClientRect();return {x:r.left+(p.x*.5+.5)*r.width,y:r.top+(-p.y*.5+.5)*r.height};},
   getVisibility:()=>({walls:dorm.room.walls.visible,beds:[...dorm.units.values()].every(u=>u.parts.bed.visible),doorsOpen:$('toggle-doors').checked,clipped:$('clip-enable').checked}),
 };

@@ -81,18 +81,21 @@ function interiorBox(part, kind) {
   const sides = boxesNamed(part,
     wardrobe ? 'wardrobe-side' : drawer ? 'drawer-side' : 'computer-cabinet-side', 'x');
   const horizontals = drawer
-    ? [...boxesNamed(part, 'drawer-bottom'), ...boxesNamed(part, 'drawer-top')]
-      .sort((a, b) => a.min.y - b.min.y)
+    ? boxesNamed(part, 'drawer-bottom', 'y')
     : boxesNamed(part, wardrobe ? 'wardrobe-horizontal' : 'computer-cabinet-horizontal', 'y');
   const back = boxesNamed(part,
     wardrobe ? 'wardrobe-back' : drawer ? 'drawer-front-or-back' : 'computer-cabinet-back', 'z');
-  if (sides.length < 2 || horizontals.length < 2 || !back.length || (drawer && back.length < 2)) return null;
+  if (sides.length < 2 || horizontals.length < (drawer ? 1 : 2)
+    || !back.length || (drawer && back.length < 2)) return null;
   // Wardrobe carcass ends at the inside face of the closed overlay doors.
   // The computer cabinet is open; the drawer has a second end panel.
   const frontInner = drawer ? back.at(-1).min.z : Math.min(...sides.map((side) => side.max.z));
+  // An extended drawer is open above: its moving side rims, not the stationary
+  // cabinet cover, bound its measured clear height and follow the box motion.
+  const topInner = drawer ? Math.min(...sides.map((side) => side.max.y)) : horizontals.at(-1).min.y;
   return new THREE.Box3(
     new THREE.Vector3(sides[0].max.x, horizontals[0].max.y, back[0].max.z),
-    new THREE.Vector3(sides.at(-1).min.x, horizontals.at(-1).min.y, frontInner),
+    new THREE.Vector3(sides.at(-1).min.x, topInner, frontInner),
   );
 }
 
